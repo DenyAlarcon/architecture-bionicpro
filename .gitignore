@@ -1,2 +1,6 @@
 /postgres-keycloak-data
 2024__yandex-architecture-sso.code-workspace
+.temp/
+.venv/
+frontend/build/
+frontend/node_modules/
