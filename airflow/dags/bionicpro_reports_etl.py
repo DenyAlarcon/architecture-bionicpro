@@ -76,6 +76,21 @@ def bionicpro_reports_etl():
             )
             ENGINE = ReplacingMergeTree(processed_until)
             ORDER BY (user_id, report_date);
+
+            CREATE TABLE IF NOT EXISTS reporting.user_report_mart_cdc (
+                user_id String,
+                client_name String,
+                report_date Date,
+                processed_until DateTime,
+                report_version DateTime64(3),
+                events_count UInt64,
+                avg_battery_level Float64,
+                avg_signal_quality Float64,
+                max_temperature Float64,
+                total_active_minutes UInt64
+            )
+            ENGINE = ReplacingMergeTree(report_version)
+            ORDER BY (user_id, report_date);
             """
         )
 
@@ -94,7 +109,10 @@ def bionicpro_reports_etl():
             FORMAT Values
             ('user1', 'Ivan Petrov', 'user1@example.com', 'prosthesis-001', now()),
             ('user2', 'Anna Smirnova', 'user2@example.com', 'prosthesis-002', now()),
-            ('admin1', 'Admin User', 'admin1@example.com', 'prosthesis-003', now());
+            ('admin1', 'Admin User', 'admin1@example.com', 'prosthesis-003', now()),
+            ('prothetic1', 'Prothetic One', 'prothetic1@example.com', 'prosthesis-101', now()),
+            ('prothetic2', 'Prothetic Two', 'prothetic2@example.com', 'prosthesis-102', now()),
+            ('prothetic3', 'Prothetic Three', 'prothetic3@example.com', 'prosthesis-103', now());
 
             INSERT INTO raw.prosthesis_telemetry
             SELECT *
@@ -107,7 +125,11 @@ def bionicpro_reports_etl():
             ('prosthesis-002', now() - INTERVAL 4 HOUR, 81, 0.89, 36.4, 80),
             ('prosthesis-002', now() - INTERVAL 2 HOUR, 79, 0.92, 36.8, 110),
             ('prosthesis-003', now() - INTERVAL 6 HOUR, 88, 0.97, 36.2, 60),
-            ('prosthesis-003', now() - INTERVAL 1 HOUR, 84, 0.95, 36.6, 75);
+            ('prosthesis-003', now() - INTERVAL 1 HOUR, 84, 0.95, 36.6, 75),
+            ('prosthesis-101', now() - INTERVAL 5 HOUR, 82, 0.93, 36.5, 105),
+            ('prosthesis-101', now() - INTERVAL 2 HOUR, 80, 0.91, 36.9, 90),
+            ('prosthesis-102', now() - INTERVAL 5 HOUR, 78, 0.88, 37.0, 75),
+            ('prosthesis-103', now() - INTERVAL 3 HOUR, 86, 0.95, 36.4, 115);
             """
         )
 
@@ -116,6 +138,7 @@ def bionicpro_reports_etl():
         clickhouse(
             """
             TRUNCATE TABLE reporting.user_report_mart;
+            TRUNCATE TABLE reporting.user_report_mart_cdc;
 
             INSERT INTO reporting.user_report_mart
             SELECT
@@ -123,6 +146,23 @@ def bionicpro_reports_etl():
                 any(c.client_name) AS client_name,
                 toDate(t.event_time) AS report_date,
                 max(t.event_time) AS processed_until,
+                count() AS events_count,
+                round(avg(t.battery_level), 2) AS avg_battery_level,
+                round(avg(t.signal_quality), 3) AS avg_signal_quality,
+                max(t.temperature) AS max_temperature,
+                sum(t.active_minutes) AS total_active_minutes
+            FROM raw.prosthesis_telemetry t
+            INNER JOIN raw.crm_clients c ON c.prosthesis_id = t.prosthesis_id
+            WHERE t.event_time < now()
+            GROUP BY c.user_id, report_date;
+
+            INSERT INTO reporting.user_report_mart_cdc
+            SELECT
+                c.user_id,
+                any(c.client_name) AS client_name,
+                toDate(t.event_time) AS report_date,
+                max(t.event_time) AS processed_until,
+                now64(3) AS report_version,
                 count() AS events_count,
                 round(avg(t.battery_level), 2) AS avg_battery_level,
                 round(avg(t.signal_quality), 3) AS avg_signal_quality,

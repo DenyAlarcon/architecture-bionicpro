@@ -40,10 +40,6 @@ def token_endpoint() -> str:
     return f"{realm_url(KEYCLOAK_INTERNAL_URL)}/protocol/openid-connect/token"
 
 
-def userinfo_endpoint() -> str:
-    return f"{realm_url(KEYCLOAK_INTERNAL_URL)}/protocol/openid-connect/userinfo"
-
-
 def auth_endpoint() -> str:
     return f"{realm_url(KEYCLOAK_EXTERNAL_URL)}/protocol/openid-connect/auth"
 
@@ -73,10 +69,13 @@ def form_post(url: str, payload: dict) -> dict:
         return json.loads(response.read().decode("utf-8"))
 
 
-def bearer_get(url: str, access_token: str) -> dict:
-    request = urllib.request.Request(url, headers={"Authorization": f"Bearer {access_token}"})
-    with urllib.request.urlopen(request, timeout=15) as response:
-        return json.loads(response.read().decode("utf-8"))
+def profile_from_token(access_token: str) -> dict:
+    try:
+        _, payload, _ = access_token.split(".")
+        payload += "=" * (-len(payload) % 4)
+        return json.loads(base64.urlsafe_b64decode(payload.encode("ascii")))
+    except (ValueError, json.JSONDecodeError):
+        return {}
 
 
 def json_get(url: str, headers: dict[str, str] | None = None) -> dict:
@@ -299,7 +298,7 @@ class Handler(BaseHTTPRequestHandler):
                     "code_verifier": auth["verifier"],
                 },
             )
-            profile = bearer_get(userinfo_endpoint(), token_response["access_token"])
+            profile = profile_from_token(token_response["access_token"])
             save_external_profile(profile)
             session_id, _ = create_session(token_response)
         except (urllib.error.URLError, KeyError, json.JSONDecodeError, sqlite3.Error):
@@ -331,7 +330,7 @@ class Handler(BaseHTTPRequestHandler):
             if not session_id or not session:
                 self.json_response({"authenticated": False}, HTTPStatus.UNAUTHORIZED)
                 return
-            profile = bearer_get(userinfo_endpoint(), session["access_token"])
+            profile = profile_from_token(session["access_token"])
             save_external_profile(profile)
             self.json_response(
                 {
@@ -351,7 +350,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.json_response({"error": "unauthorized"}, HTTPStatus.UNAUTHORIZED)
                 return
 
-            profile = bearer_get(userinfo_endpoint(), session["access_token"])
+            profile = profile_from_token(session["access_token"])
             user_id = profile.get("preferred_username") or profile.get("sub")
             if not user_id:
                 self.json_response({"error": "user_not_found"}, HTTPStatus.UNAUTHORIZED)

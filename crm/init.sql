@@ -11,7 +11,10 @@ INSERT INTO public.crm_clients (user_id, client_name, email, prosthesis_id, upda
 VALUES
     ('user1', 'Ivan Petrov', 'user1@example.com', 'prosthesis-001', now()),
     ('user2', 'Anna Smirnova', 'user2@example.com', 'prosthesis-002', now()),
-    ('admin1', 'Admin User', 'admin1@example.com', 'prosthesis-003', now())
+    ('admin1', 'Admin User', 'admin1@example.com', 'prosthesis-003', now()),
+    ('prothetic1', 'Prothetic One', 'prothetic1@example.com', 'prosthesis-101', now()),
+    ('prothetic2', 'Prothetic Two', 'prothetic2@example.com', 'prosthesis-102', now()),
+    ('prothetic3', 'Prothetic Three', 'prothetic3@example.com', 'prosthesis-103', now())
 ON CONFLICT (user_id, prosthesis_id) DO UPDATE
 SET
     client_name = EXCLUDED.client_name,

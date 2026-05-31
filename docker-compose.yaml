@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: keycloak_user
       POSTGRES_PASSWORD: keycloak_password
     volumes:
-      - ./postgres-keycloak-data:/var/lib/postgresql/data
+      - keycloak-db-data:/var/lib/postgresql/data
     ports:
       - "5433:5432"
   keycloak:
@@ -96,7 +96,21 @@ services:
       - ./clickhouse/cdc-schema.sql:/docker-entrypoint-initdb.d/cdc-schema.sql:ro
   airflow:
     image: apache/airflow:2.9.3
-    command: bash -c "rm -f /opt/airflow/airflow-webserver.pid && airflow standalone"
+    command: >
+      bash -c "
+      airflow db migrate &&
+      airflow users create
+      --username admin
+      --password admin
+      --firstname Admin
+      --lastname User
+      --role Admin
+      --email admin@example.com
+      || true;
+      airflow users reset-password --username admin --password admin;
+      airflow scheduler &
+      exec airflow webserver --port 8080
+      "
     ports:
       - "8081:8080"
     environment:
@@ -188,6 +202,7 @@ services:
       - bionicpro-auth
 
 volumes:
+  keycloak-db-data:
   bionicpro-auth-data:
   clickhouse-data:
   airflow-data:
